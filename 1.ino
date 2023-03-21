@@ -155,7 +155,7 @@ void loop(){
     if(tombol == "c") {
         clearProcess = true;
     }
-    
+
     if(resetMenu){
         inputString = "";
         lcd.clear();
@@ -173,7 +173,7 @@ void loop(){
         lcd.print("1.Pasteurisasi");
         lcd.setCursor(0,1);
         lcd.print("2.Fermentasi");
-        lcd.setCursor(0,1);
+        lcd.setCursor(0,2);
         lcd.print("3.Pendingin");
 
         if(tombol >= '0' && tombol <= '3'){
