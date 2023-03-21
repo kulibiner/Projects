@@ -37,6 +37,11 @@ LiquidCrystal_I2C lcd(0x27, 20, 4);
 
 /************* Sensing Variable **************/
 float currentSuhu;
+float rps;
+int rpm;
+int pulsePerRevolution = 1;
+unsigned long lastPulse;
+long pulsePeriod;
 
 /************* Variable Menu **************/
 bool resetMenu      = false;
@@ -77,6 +82,11 @@ unsigned long startBlink;
 unsigned long currentBlink;
 bool viewChar;
 
+void isr() {
+    pulsePeriod = millis() - lastPulse;
+    lastPulse = millis();
+}
+
 void setup(){
 
     /************* SET IO **************/
@@ -103,7 +113,9 @@ void loop() {
     // Baca input dari keypad
     char tombol = keypad.getKey();
 
-    // Request Data Temperatur dari Sensor
+    attachInterrupt(digitalPinToInterrupt(IRSensor), isr, RISING);
+    rps = (pulsePeriod * pulsePerRevolution) / 1000.00;
+    rpm = rps * 60;
 
     // Reset Display dan Variable
     if(resetMenu) {
@@ -246,6 +258,11 @@ void loop() {
                 lcd.setCursor(2,1);
                 lcd.print("C  ->");
             }
+
+            lcd.setCursor(0,2);
+            lcd.print("RPM =");
+            lcd.setCursor(5,2);
+            lcd.print(rpm);
         }
     break;
 
@@ -525,16 +542,16 @@ void loop() {
             lcd.setCursor(8,1);
             lcd.print(currentSuhu);
             
-            lcd.setCursor(0,2);
-            Serial.print(dispJam);
-            lcd.setCursor(2,2);
-            Serial.print(":");
-            lcd.setCursor(3,2);
-            Serial.print(dispMenit);
-            lcd.setCursor(5,2);
-            Serial.print(":");
-            lcd.setCursor(6,2);
-            Serial.print(dispMenit);
+            lcd.setCursor(0,3);
+            lcd.print(dispJam);
+            lcd.setCursor(2,3);
+            lcd.print(":");
+            lcd.setCursor(3,3);
+            lcd.print(dispMenit);
+            lcd.setCursor(5,3);
+            lcd.print(":");
+            lcd.setCursor(6,3);
+            lcd.print(dispMenit);
 
             DS18B20.requestTemperatures();
             currentSuhu = DS18B20.getTempCByIndex(0);
