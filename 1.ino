@@ -134,6 +134,8 @@ void loop() {
         delay(1500);
         digitalWrite(Buzzer, LOW);
 
+        lowOutput();
+
         jam = 0;
         menit = 0;
         detik = 0;
