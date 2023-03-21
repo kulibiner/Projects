@@ -151,6 +151,11 @@ void loop(){
 
     char tombol = keypad.getKey();
     DS18B20.requestTemperatures();
+
+    if(tombol == "c") {
+        clearProcess = true;
+    }
+    
     if(resetMenu){
         inputString = "";
         lcd.clear();
@@ -317,7 +322,14 @@ void loop(){
                 volume = tombol - '0';
                 Serial.println(volume);
 
-                menit = 30;
+                if(volume == 1) {
+                    menit = 30;
+                } else if(volume == 2) {
+                    menit = 40;
+                } else if(volume == 3) {
+                    menit = 50;
+                }
+
                 jalan = true;
                 resetMenu = true;
 
@@ -327,7 +339,9 @@ void loop(){
                 lcd.setCursor(0, 0);
                 lcd.print("1.10L/30m/80RPM");
                 lcd.setCursor(0, 1);
-                lcd.print("2.13L/30m/90RPM");
+                lcd.print("2.13L/40m/90RPM");
+                lcd.setCursor(0, 2);
+                lcd.print("2.13L/50m/100RPM");
             }
 
 
