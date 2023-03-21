@@ -4,19 +4,7 @@
 #include <OneWire.h>
 #include <DallasTemperature.h>
 
-/*
-    IO Mapping
-    Kipas  (output)             14
-    Heater  (output)            2
-    Buzzer  (output)            13
-    Motor   (output-pwm)        3
-    keypad  (input)             4,5,6,7,8,9,10,11
-    DS18b20 (input)             18
-    Sensor  (input-interupt)    12
-
-*/
-
-
+/************* IOPin **************/
 const int heater    = 2;
 const int Buzzer    = 13;
 const int Motor     = 3;
@@ -24,9 +12,7 @@ const int pinSuhu   = 12;
 const int IRSensor  = 18;
 const int Kipas     = 14;
 
-OneWire pin_DS18B20(pinSuhu);
-DallasTemperature DS18B20(&pin_DS18B20);
-
+/************* KEYPAD **************/
 const byte ROWS = 4;
 const byte COLS = 4;
 byte colPins[COLS]  = {7, 6, 5, 4};
@@ -41,44 +27,40 @@ char keymap[ROWS][COLS] = {
 
 Keypad  keypad = Keypad( makeKeymap(keymap), rowPins, colPins, ROWS, COLS);
 
+/************* DS18B20 **************/
+OneWire pin_DS18B20(pinSuhu);
+DallasTemperature DS18B20(&pin_DS18B20);
+
+/************* LCD **************/
 LiquidCrystal_I2C lcd(0x27, 20, 4);
 
-// Suhu Minimal input 
-int suhuMinimal = 20;
 
-// Variable IO
+/************* Sensing Variable **************/
 float currentSuhu;
 
-// Variable Menu
-bool resetMenu = false;
-int setMode = 0;
-int Menu, subMenu, sub2Menu;
-int indexMenu;
-String inputString;
+/************* Variable Menu **************/
+bool resetMenu      = false;
+int Menu            = 0;
+int indexMenu       = 1;
+int setMode         = 0;
+String inputString  = "";
 
-// Variable pasteurisasi
-bool Pasteurisasi = false;
-int volume;
+/************* Variable Pasteurisasi **************/
 int suhuPasteurisasi;
-int durasiPasteurisasi;
+int volume;
+int PWMMotor;
 
-// Variable Fermentasi
-bool fermentasi = false;
+/************* Variable Pendinginan **************/
+int suhuPendinginan;
+int durasiPendinginan;
+
+/************* Variable Fermentasi **************/
 int suhuFermentasi;
-int diffFermentasi;
 int durasiFermentasi;
 
-// Variable Pendingin
-bool pendingin = false;
-int suhuPendingin;
-int diffPendingin;
-int durasiPendingin;
-
-bool clearProcess = false;
-bool running = false;
-bool jalan = false;
-
-// variable timer
+/************* Variable Timer **************/
+bool running             = false;
+bool clearProcess        = false;
 const long timerInterval = 1000;
 unsigned long startTimer;
 unsigned long currentTimer;
@@ -89,366 +71,397 @@ String dispDetik;
 String dispMenit;
 String dispJam;
 
-const long blinkChar = 500;
-unsigned long currentCharMillis;
-unsigned long startCharMillis;
+/************* Variable Blinking Display **************/
+const long blinkInterval = 500;
+unsigned long startBlink;
+unsigned long currentBlink;
 bool viewChar;
-
-// rpm
-unsigned long startRpmRev;
-unsigned long endRpmRev;
-float RevDuration;
-int count;
-float rpm;
-bool rpmTriggered;
-
-unsigned long timePeriod;
-unsigned long lastTimePulse;
-float RPMValue;
-
-// void isr() {
-//     timePeriod = millis() - lastTimePulse ;
-
-//     lastTimePulse = millis();
-// }
 
 void setup(){
 
+    /************* SET IO **************/
     pinMode(heater, OUTPUT);
     pinMode(Buzzer, OUTPUT);
     pinMode(Motor, OUTPUT);
     pinMode(Kipas, OUTPUT);
     pinMode(IRSensor, INPUT);
 
+    /************* SET BAUDRATE **************/
     Serial.begin(9600);
 
+    /************* SET Sensor Suhu **************/
     DS18B20.begin();
 
-    inputString.reserve(4);
-
+    /************* SET LCD **************/
     lcd.begin();
-	lcd.backlight();
+    lcd.backlight();
 
-    // attachInterrupt(5, rpm_fun, FALLING);
-    // attachInterrupt(digitalPinToInterrupt(18), rpm_fun, RISING);
-
-    // attachInterrupt(digitalPinToInterrupt(18),isr,RISING);
-
+    inputString.reserve(4);
 }
 
-void loop(){
-
-    // attachInterrupt(digitalPinToInterrupt(IRSensor), isr, FALLING);
-
-    /******************************************
-     * RPM CALCULATION
-     * Perhitungan RPM memanfaatkan delay waktu
-    ******************************************/
-    // RPMValue = (timePeriod / 1000) * 60;
-
-    // delay(100);
-    //     Serial.println(RevDuration);
-
+void loop() {
+    // Baca input dari keypad
     char tombol = keypad.getKey();
-    DS18B20.requestTemperatures();
 
-    if(tombol == "c") {
-        clearProcess = true;
-    }
+    // Request Data Temperatur dari Sensor
 
-    if(resetMenu){
-        inputString = "";
+    // Reset Display dan Variable
+    if(resetMenu) {
         lcd.clear();
+        inputString = "";
         resetMenu = false;
     }
 
-    /***************************************************************************
-     * MENU UTAMA
-     * Input menu pilihan
-    ***************************************************************************/
-    if(indexMenu == 0) {
+    if(tombol == 'c') {
+        running = false;
 
-        /* Displaynya BRO*/
         lcd.setCursor(0,0);
-        lcd.print("1.Pasteurisasi");
-        lcd.setCursor(0,1);
-        lcd.print("2.Fermentasi");
-        lcd.setCursor(0,2);
-        lcd.print("3.Pendingin");
+        lcd.print("RESETING...");
 
+        digitalWrite(Buzzer, HIGH);
+        delay(1500);
+        digitalWrite(Buzzer, LOW);
+
+        jam = 0;
+        menit = 0;
+        detik = 0;
+        Menu = 0;
+        indexMenu = 1;
+
+    }
+
+    switch (Menu){
+    /*******************************************
+    * MENU UTAMA
+    ********************************************/
+    case 0:
         if(tombol >= '0' && tombol <= '3'){
-            lcd.clear();
             Menu = tombol - '0';
-
-            indexMenu++;
             Serial.print("Masuk Menu ");
             Serial.println(Menu);
-        }
-    }
-    
-    else if(indexMenu == 1) {
-
-        if(tombol >= '0' && tombol <= '9'){
-            inputString += tombol;
-        }
-        else if(tombol == 'd') {
             resetMenu = true;
-            indexMenu--;
-            setMode = 0;
         }
 
-        switch (Menu){
-
-            /***************************************************************************
-             * Menu PASTEURISASI
-             * Input suhu pasteurisasi
-            ***************************************************************************/
-            case 1:
-                if(tombol == 'a') {
-                    if(inputString.toInt() > suhuMinimal) {
-                        suhuPasteurisasi = inputString.toInt();
-
-                        Serial.print("Suhu Pasteurisasi berhasil di input, ");
-                        Serial.print(suhuPasteurisasi);
-                        Serial.print(" Derajat Celcius");
-
-                        indexMenu++;
-                    } else {
-                        Serial.println("Gagal, input suhu tidak valid");
-                        inputString = "";
-                    }
-
-                    resetMenu = true;
-                }
-
-                // ------------------ Display Setting Suhu Pasteurisasi ------------------ //
-                lcd.setCursor(0,0);
-                lcd.print("PASTEURISASI");
-
-                lcd.setCursor(0,1);
-                lcd.print("Suhu:");
-                lcd.setCursor(5,1);
-                lcd.print(inputString);
-            break;
-
-            /***************************************************************************
-             * Menu FERMENTASI
-             * Input Suhu Fermentasi
-            ***************************************************************************/
-            case 2:
-                if(tombol == 'a') {
-
-                    if(inputString.toInt() > suhuMinimal) {
-                        suhuFermentasi = inputString.toInt();
-
-                        Serial.print("Suhu Fermentasi berhasil di input, ");
-                        Serial.print(suhuFermentasi);
-                        Serial.println(" Derajat Celcius");
-
-                        indexMenu++;
-                    } else {
-                        Serial.println(" Gagal, input suhu tidak valid");
-                    }
-
-                    resetMenu = true;
-                }
-
-                // ------------------ Display Setting Suhu Fermentasi ------------------ //
-                lcd.setCursor(0,0);
-                lcd.print("FERMENTASI");
-
-                lcd.setCursor(0,1);
-                lcd.print("Suhu:");
-
-                // Print Suhu Setpoint
-                lcd.setCursor(5,1);
-                lcd.print(inputString);
-            break;
-
-            /***************************************************************************
-             * Menu PENDINGIN
-             * Input suhu pendinginan
-            ***************************************************************************/
-            case 3:
-                if(tombol == 'a') {
-                    if(inputString.toInt() > suhuMinimal) {
-                        suhuPendingin = inputString.toInt();
-
-                        Serial.print("Suhu pendingin berhasil di input, ");
-                        Serial.print(suhuPendingin);
-                        Serial.print(" Derajat Celcius");
-
-                        indexMenu++;
-                    } else {
-                        Serial.println("Gagal, input suhu tidak valid");
-                        inputString = "";
-                    }
-
-                    resetMenu = true;
-                }
-
-                lcd.setCursor(0,0);
-                lcd.print("PENDINGIN");
-
-                lcd.setCursor(0,1);
-                lcd.print("Suhu:");
-
-                // Print Suhu Setpoint
-                lcd.setCursor(5,1);
-                lcd.print(inputString);
-            break;
-        }
-    }
-
-
-    else if(indexMenu == 2) {
+        lcd.setCursor(0,0);
+        lcd.print("1. Pasteurisasi");
+        lcd.setCursor(0,1);
+        lcd.print("2. Pendinginan");
+        lcd.setCursor(0,2);
+        lcd.print("3. Fermentasi");
+    break;
+    
+    /*******************************************
+    * PASTEURISASI
+    ********************************************/
+    case 1:
         if(tombol >= '0' && tombol <= '9') {
             inputString += tombol;
         }
-        else if(tombol == 'd') {
-            resetMenu = true;
-            indexMenu--;
 
+        // IndexMenu 1 Pasteurisasi, Input Suhu
+        if(indexMenu == 1) {
+            if(tombol == 'a') {
+                if(inputString.toInt() > 20) {
+                    suhuPasteurisasi = inputString.toInt();
+                    Serial.println("Input Suhu Pasteurisasi Berhasil");
+
+                    resetMenu = true;
+                    indexMenu++;
+                } else {
+                    Serial.println("Gagal, Input suhu tidak valid");
+                    resetMenu = true;
+                }
+            } else if(tombol == 'd') {
+                    Menu = 0;
+            }
+
+            lcd.setCursor(0,0);
+            lcd.print("Pasteurisasi");
+            lcd.setCursor(0,1);
+            lcd.print("Suhu:");
+            lcd.setCursor(5,1);
+            lcd.print(inputString);
         }
 
-        switch (Menu){
-
-        /***************************************************************************
-         * Menu PASTEURISASI
-         * Input Volume pasteurisasi
-        ***************************************************************************/
-        case 1:
-            if(tombol >= '0' && tombol <= '3') {
-                volume = tombol - '0';
-                Serial.println(volume);
-
-                if(volume == 1) {
-                    menit = 30;
-                } else if(volume == 2) {
-                    menit = 40;
-                } else if(volume == 3) {
-                    menit = 50;
-                }
-
-                jalan = true;
+        // IndexMenu 2 Pasteurisasi, Input Volume Susu
+        else if(indexMenu == 2) {
+            if(tombol == '1') {
+                menit = 30;
+                PWMMotor = 50;
                 resetMenu = true;
-
+                indexMenu++;
+            } else if(tombol == '2') {
+                PWMMotor = 100;
+                menit = 40;
+                resetMenu = true;
+                indexMenu++;
+            } else if(tombol == '3') {
+                PWMMotor = 150;
+                menit = 50;
+                resetMenu = true;
+                indexMenu++;
+            } else if(tombol == 'd') {
+                resetMenu = true;
+                indexMenu--;
             }
 
-            if(jalan == false && clearProcess == false) {
-                lcd.setCursor(0, 0);
-                lcd.print("1.10L/30m/80RPM");
-                lcd.setCursor(0, 1);
-                lcd.print("2.13L/40m/90RPM");
-                lcd.setCursor(0, 2);
-                lcd.print("2.13L/50m/100RPM");
-            }
-
-
-        break;
-        
-        /***************************************************************************
-         * Menu FERMENTASI
-         * Input durasi fermentasi
-        ***************************************************************************/
-        case 2:
-            if(tombol == 'a') {
-                if(inputString.toInt() > 0) {
-
-                    durasiFermentasi = inputString.toInt();
-
-                    Serial.print("Durasi fermentasi berhasil di input, ");
-                    Serial.print(durasiFermentasi);
-                    Serial.println(" Jam");
-
-                    jam = durasiFermentasi;
-                    jalan = true;
-                    resetMenu = true;
-
-                    // proses("fermentasi", 1);
-
-
-                } else {
-                    Serial.println("Gagal, input durasi tidak valid ");
-                }
-            }
-
-            if(jalan == false && clearProcess == false) {
-                lcd.setCursor(0,0);
-                lcd.print("FERMENTASI");
-                lcd.setCursor(0,1);
-                lcd.print("Durasi:");
-                lcd.setCursor(7,1);
-                lcd.print(inputString);
-                lcd.setCursor(10,1);
-                lcd.print("jam");
-            }
-        break;
-
-        /***************************************************************************
-         * Menu PENDINGIN
-         * Input durasi Pendingin
-        ***************************************************************************/
-        case 3:
-            if(tombol == 'a') {
-                if(inputString.toInt() > 0) {
-
-                    if(inputString.toInt() > 60) {
-                        jam = inputString.toInt() / 60;
-                        durasiPendingin = inputString.toInt() % 60;
-                    } else {
-                        durasiPendingin = inputString.toInt();
-                    }
-
-                    Serial.print("Durasi pendingin berhasil di input, ");
-                    Serial.print(durasiPendingin);
-                    Serial.println(" Menit");
-
-                    menit = durasiPendingin;
-                    jalan = true;
-                    resetMenu = true;
-
-                } else {
-                    Serial.println("Gagal, input durasi tidak valid ");
-                }
-            }
-
-            if(jalan == false && clearProcess == false) {
-                lcd.setCursor(0,0);
-                lcd.print("PENDINGIN");
-                lcd.setCursor(0,1);
-                lcd.print("Durasi:");
-                lcd.setCursor(7,1);
-                lcd.print(inputString);
-                lcd.setCursor(10,1);
-                lcd.print("menit");
-            }
-        break;
+            lcd.setCursor(0,0);
+            lcd.print("1.10l/30M/80RPM");
+            lcd.setCursor(0,1);
+            lcd.print("2.13l/40M/90RPM");
+            lcd.setCursor(0,2);
+            lcd.print("3.15l/50M/100RPM");
         }
-    }
 
-    /***************************************************************************
-     * Clear Proses
-     * Mereset Timer, Menu, dan IO ketika waktu sudah tercapai
-    ***************************************************************************/
-    if(clearProcess) {
-        if(tombol == 'd') {
+        // IndexMenu 3  Pasteurisasi , Akan mengaktifkan timer dan output yang diperlukan
+        else if(indexMenu == 3) {
+
+            // Set PWM Motor 75 dari 255
+            analogWrite(Motor, PWMMotor);
+
+            // Akan dieksekusi ketika suhu dibawah setpoint
+            if(suhuPasteurisasi > currentSuhu) {
+                digitalWrite(heater, HIGH);
+                digitalWrite(Kipas, LOW);
+            } else {    // Sebaliknya
+                digitalWrite(heater, LOW);
+                digitalWrite(Kipas, HIGH);
+            }
+
+
+            running = true;
+
+            lcd.setCursor(0,0);
+            lcd.print("Pasteurisasi");
+            lcd.setCursor(0,1);
+            lcd.print(suhuPasteurisasi);
+            if(suhuPasteurisasi > 10) {
+                lcd.setCursor(2,1);
+                lcd.print((char)223);
+                lcd.setCursor(3,1);
+                lcd.print("C ->");
+            } else {
+                lcd.setCursor(1,1);
+                lcd.print((char)223);
+                lcd.setCursor(2,1);
+                lcd.print("C  ->");
+            }
+        }
+    break;
+
+    /*******************************************
+    * PENDINGINAN
+    ********************************************/
+    case 2:
+        if(tombol >= '0' && tombol <= '9') {
+            inputString += tombol;
+        }
+        
+        //indexMenu Pendinginan, Input Setpoint Suhu Pendinginan
+        if(indexMenu == 1) {
+            if(tombol == 'a') {
+                if(inputString.toInt() > 20) {
+                    suhuPendinginan = inputString.toInt();
+                    Serial.println("Input Suhu Pasteurisasi Berhasil");
+
+                    resetMenu = true;
+                    indexMenu++;
+                } else {
+                    Serial.println("Gagal, Input suhu tidak valid");
+                    resetMenu = true;
+                }
+            } else if(tombol == 'd') {
+                    Menu = 0;
+            }
+
+
+            lcd.setCursor(0,0);
+            lcd.print("Pendinginan");
+            lcd.setCursor(0,1);
+            lcd.print("Suhu:");
+            lcd.setCursor(5,1);
+            lcd.print(inputString);
+        }
+        
+        //indexMenu 2 Pendinginan, Input Setpoint Durasi Pendinginan
+        else if(indexMenu == 2) {
+            if(tombol == 'a') {
+                if(inputString.toInt() > 0) {
+                    if(inputString.toInt() > 60) {
+                        durasiPendinginan = inputString.toInt();
+                        jam = durasiPendinginan / 60;
+                        menit = durasiPendinginan % 60;
+                        resetMenu = true;
+                        indexMenu++;
+                    } else {
+                        durasiPendinginan = inputString.toInt();
+                        menit = durasiPendinginan;
+                        resetMenu = true;
+                        indexMenu++;
+                    }
+                } else {
+                    Serial.println("Input Durasi Pendingin Gagal");
+                        resetMenu = true;
+                }
+            } else if(tombol == 'd') {
+                resetMenu = true;
+                indexMenu--;
+            }
+
+            lcd.setCursor(0,0);
+            lcd.print("Pendinginan");
+            lcd.setCursor(0,1);
+            lcd.print("Durasi:");
+            lcd.setCursor(7,1);
+            lcd.print(inputString);
+            lcd.setCursor(10,1);
+            lcd.print("menit");
+        }
+
+        // IndexMenu 3  Pendinginan , Akan mengaktifkan timer dan output yang diperlukan
+        else if(indexMenu == 3) {
+
+            // Akan dieksekusi ketika suhu dibawah setpoint
+            if(suhuPendinginan < currentSuhu) {
+                digitalWrite(Kipas, HIGH);
+            } else {    // Sebaliknya
+                digitalWrite(Kipas, LOW);
+            }
+
+            running = true;
+
+            lcd.setCursor(0,0);
+            lcd.print("Pendinginan");
+            lcd.setCursor(0,1);
+            lcd.print(suhuPendinginan);
+            if(suhuPendinginan > 10) {
+                lcd.setCursor(2,1);
+                lcd.print((char)223);
+                lcd.setCursor(3,1);
+                lcd.print("C ->");
+            } else {
+                lcd.setCursor(1,1);
+                lcd.print((char)223);
+                lcd.setCursor(2,1);
+                lcd.print("C  ->");
+            }
+        }
+    break;
+
+    /*******************************************
+    * FERMENTASI
+    ********************************************/
+    case 3:
+        if(tombol >= '0' && tombol <= '9') {
+            inputString += tombol;
+        }
+
+        //indexMenu 1 Fermentasi, Input Setpoint Suhu Fermentasi
+        if(indexMenu == 1) {
+            if(tombol == 'a') {
+                if(inputString.toInt() > 20) {
+                    suhuFermentasi = inputString.toInt();
+                    Serial.println("Input Suhu Pasteurisasi Berhasil");
+
+                    resetMenu = true;
+                    indexMenu++;
+                } else {
+                    Serial.println("Gagal, Input suhu tidak valid");
+                    resetMenu = true;
+                }
+            } else if(tombol == 'd') {
+                    Menu = 0;
+            }
+
+            lcd.setCursor(0,0);
+            lcd.print("Fermentasi");
+            lcd.setCursor(0,1);
+            lcd.print("Suhu:");
+            lcd.setCursor(5,1);
+            lcd.print(inputString);
+        }
+
+        //indexMenu 2 Fermentasi, Input Setpoint Durasi Fermentasi
+        else if(indexMenu == 2) {
+            if(tombol == 'a') {
+                if(inputString.toInt() > 0) {
+                    durasiFermentasi = inputString.toInt();
+                    jam = durasiFermentasi;
+                    Serial.println("Input durasi fermentasi berhasil");
+                    resetMenu = true;
+                    indexMenu++;
+                } else {
+                    Serial.println("Input durasi fermentasi berhasil");
+                    resetMenu = true;
+                }
+            } else if(tombol == 'd') {
+                resetMenu = true;
+                indexMenu--;
+            }
+
+            lcd.setCursor(0,0);
+            lcd.print("Fermentasi");
+            lcd.setCursor(0,1);
+            lcd.print("Durasi:");
+            lcd.setCursor(7,1);
+            lcd.print(inputString);
+            lcd.setCursor(10,1);
+            lcd.print("jam");
+        }
+
+        // IndexMenu 3  Fermentasi , Akan mengaktifkan timer dan output yang diperlukan
+        else if(indexMenu == 3) {
+
+            // Akan dieksekusi ketika suhu dibawah setpoint
+            if(suhuFermentasi > currentSuhu) {
+                digitalWrite(heater, HIGH);
+            } else {    // Sebaliknya
+                digitalWrite(heater, LOW);
+            }
+
+            running = true;
+
+            lcd.setCursor(0,0);
+            lcd.print("Fermentasi");
+            lcd.setCursor(0,1);
+            lcd.print(suhuFermentasi);
+
+            if(suhuFermentasi > 10) {
+                lcd.setCursor(2,1);
+                lcd.print((char)223);
+                lcd.setCursor(3,1);
+                lcd.print("C ->");
+            } else {
+                lcd.setCursor(1,1);
+                lcd.print((char)223);
+                lcd.setCursor(2,1);
+                lcd.print("C  ->");
+            }
+        }
+    break;
+
+    /*******************************************
+    * ALARM SELESAI - DIEKSEKUSI SETELAH TIMER SUDAH SELESAI
+    ********************************************/
+    case 4:
+        if(tombol == 'a') {
             jam = 0;
             menit = 0;
             detik = 0;
             Menu = 0;
-            indexMenu = 0;
+            indexMenu = 1;
             viewChar = false;
             
-            clearProcess = false;
+            Menu = 0;
         }
+
         lowOutput();
 
-        currentCharMillis = millis();
-        if(currentCharMillis - startCharMillis > blinkChar) {
+        currentBlink = millis();
+        if(currentBlink - startBlink > blinkInterval) {
             viewChar = !viewChar;
 
-            startCharMillis = currentCharMillis;
+            startBlink = currentBlink;
         }
 
         if(viewChar) {
@@ -459,15 +472,38 @@ void loop(){
             resetMenu = true;
             digitalWrite(Buzzer, LOW);
         }
+    break;
+
     }
 
-    if(jalan) {
+    /*******************************************
+    * TIMER - Timer menghitung Mundur
+    ********************************************/
+    if(running) {
+        // Zero Padding
+        if(detik < 10) {
+            dispDetik = "0";
+            dispDetik += detik;
+        } else {
+            dispDetik = detik; 
+        }
+        if(menit < 10) {
+            dispMenit = "0";
+            dispMenit += menit;
+        } else {
+            dispMenit = menit; 
+        }
+        if(jam < 10) {
+            dispJam = "0";
+            dispJam += jam;
+        } else {
+            dispJam = jam; 
+        }
 
         currentTimer = millis();
         if(currentTimer - startTimer > timerInterval) {
-            //************** DECREMENT WAKTU **************//
             detik--;
-            if(detik <= 0) {
+            if(detik < 0) {
                 detik = 59;
                 menit--;
             }
@@ -476,81 +512,9 @@ void loop(){
                 jam--;
             }
             if(jam < 0) {
-                clearProcess = true;
-                jalan = false;
+                Menu = 4;
+                running = false;
             }
-
-            //************** AMBIL DATA TEMPERATUR **************//
-            currentSuhu = DS18B20.getTempCByIndex(0);
-
-            //************** ZERO PADDING **************//
-            if(detik < 10) {
-                dispDetik = "0";
-                dispDetik += detik;
-            } else {
-                dispDetik = detik; 
-            }
-            if(menit < 10) {
-                dispMenit = "0";
-                dispMenit += menit;
-            } else {
-                dispMenit = menit; 
-            }
-            if(jam < 10) {
-                dispJam = "0";
-                dispJam += jam;
-            } else {
-                dispJam = jam; 
-            }
-
-            //************** PEMBACAAN RPM **************//
-            if(digitalRead(IRSensor) == LOW && rpmTriggered == false ) {
-                if(count == 0) {
-                    startRpmRev = millis();
-                    count++;
-                } else {
-                    endRpmRev = millis();
-                    count = 0;
-                }
-                rpmTriggered = true;
-            } else if(digitalRead(IRSensor) == HIGH && rpmTriggered == true) {
-                RevDuration = startRpmRev - endRpmRev;
-                rpm = (1 /(RevDuration / 1000)) * 60;
-                if(rpm > 0) {
-                    Serial.println(rpm);
-                }
-                rpmTriggered = false;
-            }
-
-
-            //************** DISPLAY **************//
-            lcd.setCursor(8,1);
-            lcd.print(currentSuhu);
-            if(currentSuhu < 10) {
-                lcd.setCursor(12,1);
-                lcd.print((char)223);
-                lcd.setCursor(13,1);
-                lcd.print("C ");
-            } else {
-                lcd.setCursor(13,1);
-                lcd.print((char)223);
-                lcd.setCursor(14,1);
-                lcd.print("C");
-            }
-            lcd.setCursor(0,3);
-            lcd.print(dispJam);
-
-            lcd.setCursor(2,3);
-            lcd.print(":");
-
-            lcd.setCursor(3,3);
-            lcd.print(dispMenit);
-
-            lcd.setCursor(5,3);
-            lcd.print(":");
-
-            lcd.setCursor(6,3);
-            lcd.print(dispDetik);
 
             Serial.print(dispJam);
             Serial.print(":");
@@ -558,115 +522,34 @@ void loop(){
             Serial.print(":");
             Serial.println(dispDetik);
 
+            lcd.setCursor(8,1);
+            lcd.print(currentSuhu);
+            
+            lcd.setCursor(0,2);
+            Serial.print(dispJam);
+            lcd.setCursor(2,2);
+            Serial.print(":");
+            lcd.setCursor(3,2);
+            Serial.print(dispMenit);
+            lcd.setCursor(5,2);
+            Serial.print(":");
+            lcd.setCursor(6,2);
+            Serial.print(dispMenit);
+
+            DS18B20.requestTemperatures();
+            currentSuhu = DS18B20.getTempCByIndex(0);
+
             startTimer = currentTimer;
         }
 
-        //************** Proses Output **************//
-        if(Menu == 1) {                                    // Untuk Output Pasteurisasi
-            
-            if(volume == 1) {
-                analogWrite(Motor, 20);
-            }
-            else if(volume == 2) {
-                analogWrite(Motor, 40);
-            }
-            else if(volume == 3) {
-                analogWrite(Motor, 60);
-            }
-
-            if(currentSuhu < suhuPasteurisasi) {
-                digitalWrite(heater, HIGH);
-                digitalWrite(Kipas, LOW);
-            } else {
-                digitalWrite(heater, LOW);
-                digitalWrite(Kipas, HIGH);
-            }
-
-            lcd.setCursor(0,0);
-            lcd.print("PASTEURISASI");
-            
-            lcd.setCursor(5,1);
-            lcd.print("->");
-
-            lcd.setCursor(0,1);
-            lcd.print(suhuPasteurisasi);
-            if(suhuPasteurisasi < 10) {
-                lcd.setCursor(2,1);
-                lcd.print((char)223);
-                lcd.setCursor(3,1);
-                lcd.print("C ");
-            } else {
-                lcd.setCursor(2,1);
-                lcd.print((char)223);
-                lcd.setCursor(3,1);
-                lcd.print("C");
-            }
-
-            lcd.setCursor(0,2);
-            lcd.print("Rpm:");
-
-            lcd.setCursor(4,2);
-            lcd.print(rpm);
-        }
-        else if(Menu == 2) {                                // Untuk Output Fermentasi
-            if(currentSuhu < suhuFermentasi) {
-                digitalWrite(heater, HIGH);
-            } else {
-                digitalWrite(heater, LOW);
-            }
-
-            lcd.setCursor(0,0);
-            lcd.print("FERMENTASI");
-            
-            lcd.setCursor(5,1);
-            lcd.print("->");
-
-            lcd.setCursor(0,1);
-            lcd.print(suhuFermentasi);
-            if(suhuFermentasi < 10) {
-                lcd.setCursor(2,1);
-                lcd.print((char)223);
-                lcd.setCursor(3,1);
-                lcd.print("C ");
-            } else {
-                lcd.setCursor(2,1);
-                lcd.print((char)223);
-                lcd.setCursor(3,1);
-                lcd.print("C");
-            }
-        }
-        else if(Menu == 3) {                                // Untuk Output Pendinginan
-            if(currentSuhu > suhuPendingin) {
-                digitalWrite(Kipas, HIGH);
-            } else {
-                digitalWrite(Kipas, LOW);
-            }
-
-            lcd.setCursor(0,0);
-            lcd.print("PENDINGIN");
-
-            lcd.setCursor(5,1);
-            lcd.print("->");
-
-            lcd.setCursor(0,1);
-            lcd.print(suhuPendingin);
-            if(suhuPendingin < 10) {
-                lcd.setCursor(2,1);
-                lcd.print((char)223);
-                lcd.setCursor(3,1);
-                lcd.print("C ");
-            } else {
-                lcd.setCursor(2,1);
-                lcd.print((char)223);
-                lcd.setCursor(3,1);
-                lcd.print("C");
-            }
-        }
     }
+
 }
 
+/*******************************************
+* SET SEMUA OUTPUT LOW
+********************************************/
 void lowOutput() {
-    // Setelah proses selesai, set semua output menjadi 0
     digitalWrite(heater, LOW);
     digitalWrite(Kipas, LOW);
     digitalWrite(Motor, LOW);
